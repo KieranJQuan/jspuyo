@@ -297,6 +297,32 @@ function panelsInit(socket, getCurrentUID, stopCurrentSession) {
 		document.getElementById('joinIdFormError').style.display = 'block';
 	});
 
+	// Event received when attempting to join a password-protected room
+	socket.on('requireRoomPassword', roomId => {
+		modal.style.display = 'block';
+		document.getElementById('joinRoomPasswordModal').style.display = 'block';
+		document.getElementById('joinRoomModal').style.display = 'none';
+		document.getElementById('joinRoomId').innerHTML = roomId;
+	});
+
+	// The form to submit the room password
+	document.getElementById('joinRoomPasswordForm').onsubmit = function (event) {
+		// Prevent submit button from refreshing the page
+		event.preventDefault();
+		const roomPassword = document.getElementById('joinRoomPassword').value;
+		const joinId = document.getElementById('joinRoomId').innerHTML || null;
+
+		socket.emit('joinRoom', { gameId: getCurrentUID(), joinId, roomPassword });
+	};
+
+	// Event received when entering the wrong password to a password-protected room
+	socket.on('joinRoomPasswordFailure', message => {
+		modal.style.display = 'block';
+		document.getElementById('joinRoomPasswordModal').style.display = 'block';
+		document.getElementById('joinRoomPasswordFormError').innerHTML = message;
+		document.getElementById('joinRoomPasswordFormError').style.display = 'block';
+	});
+
 	// Custom - Spectate
 	document.getElementById('spectate').onclick = () => {
 		stopCurrentSession();
@@ -442,6 +468,19 @@ function panelsInit(socket, getCurrentUID, stopCurrentSession) {
 
 		document.getElementById('cpuOptions').appendChild(cpuOptionElement);
 	}
+
+	document.getElementById('gallery').onclick = async function() {
+		stopCurrentSession();
+		// Leave the room
+		socket.emit('forceDisconnect');
+
+		const stats = await PlayerInfo.getUserProperty(getCurrentUID(), 'stats');
+		// Need to stringify object before storing, otherwise the data will not be stored correctly
+		window.localStorage.setItem('stats', JSON.stringify(stats));
+
+		// Redirect to gallery subdirectory
+		window.location.assign('/gallery');
+	};
 
 	// Profile Panel - Settings
 	document.getElementById('settings').onclick = function() {

@@ -247,11 +247,6 @@ class GameArea extends CanvasLayer {
 		this.update();
 		return this.getHash();
 	}
-	initNuisanceDrop(nuisanceCascadeFPR) {
-		this.boardLayer.initNuisanceDrop(nuisanceCascadeFPR);
-		this.update();
-		return this.getHash();
-	}
 	dropNuisance(boardState, nuisanceState) {
 		this.boardLayer.dropNuisance(boardState, nuisanceState);
 		this.update();
@@ -417,12 +412,8 @@ class BoardLayer extends CanvasLayer {
 		}
 		this.update();
 	}
-	initNuisanceDrop(nuisanceCascadeFPR) {
-		this.nuisanceCascadeFPR = nuisanceCascadeFPR;
-		this.update();
-	}
 	dropNuisance(boardState, nuisanceState) {
-		const { nuisanceArray, currentFrame } = nuisanceState;
+		const { nuisanceArray, positions } = nuisanceState;
 		if (this.hasStackChanged(MODE.NUISANCE_DROPPING)) {
 			this.stackLayer.resetState();
 			const connections = new Board(this.settings, boardState).getConnections();
@@ -433,13 +424,19 @@ class BoardLayer extends CanvasLayer {
 			});
 		}
 		this.dynamicLayer.resetState();
-		for (let i = 0; i < this.settings.cols; i++) {
-			const startingRowsAbove = this.settings.nuisanceSpawnRow - boardState[i].length;
-			const rowsDropped = Math.min(currentFrame / this.nuisanceCascadeFPR[i], startingRowsAbove);
-			for (let j = 0; j < nuisanceArray[i].length; j++) {
-				this.dynamicLayer.drawPuyo(NUISANCE, 0.5 + i, this.settings.rows - 0.5 - this.settings.nuisanceSpawnRow + rowsDropped - j);
+		nuisanceState.allLanded = true;
+
+		positions.forEach((height, index) => {
+			if(height !== -1) {
+				const startRow = Math.max(height, boardState[index].length);
+				if(height > boardState[index].length) {
+					nuisanceState.allLanded = false;
+				}
+				for (let i = 0; i < nuisanceArray[index].length; i++) {
+					this.dynamicLayer.drawPuyo(NUISANCE, index + 0.5, this.settings.rows - 0.5 - (startRow + i));
+				}
 			}
-		}
+		});
 		this.update();
 	}
 }

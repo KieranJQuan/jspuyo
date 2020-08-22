@@ -1,7 +1,7 @@
 'use strict';
 
 class Settings {
-	constructor(gamemode = 'Tsu', gravity = 0.036, rows = 12, cols = 6, softDrop = 0.29, numColours = 4,
+	constructor(gamemode = 'Tsu', gravity = 0.036, rows = 12, cols = 6, softDrop = 0.5, numColours = 4,
 				targetPoints = 70, marginTime = 96000, minChain = 0, seed = Math.random()) {		// eslint-disable-line indent
 		this.gamemode = gamemode;			// Type of game that is being played
 		this.gravity = gravity;				// Vertical distance the drop falls every frame naturally (without soft dropping)
@@ -15,15 +15,19 @@ class Settings {
 		this.seed = seed;					// Seed for generating drops
 
 		// Constants that cannot be modified
-		this.lockDelay = 530;				// Milliseconds of time before a drop locks into place
+		this.lockDelayFrames = 32;			// Frames before a drop locks into place
 		this.frames_per_rotation = 8;		// Number of frames used to animate 90 degrees of rotation
 		this.rotate180_time = 200;			// Max milliseconds after a rotate attempt that a second rotate attempt will trigger 180 rotation
 		this.squishFrames = 16;				// Number of frames used for squishing a drop into the stack
 		this.dropFrames = 10;				// Number of frames used for all the puyo to drop
 		this.popFrames = 65;				// Number of frames used to pop any amount of puyos
-		this.isoCascadeFramesPerRow	= 3.25;	// Number of frames used for an isolated puyo to fall one row
-		this.meanNuisanceCascadeFPR = 3;	// Average frames used for nuisance to drop one row
-		this.varNuisanceCascadeFPR = 0.3; 	// Max positive or negative difference in frames used for nuisance to drop one row
+
+		this.terminalVelocity = 0.5;		// Maximum speed that a puyo can fall at
+		this.splitPuyoInitialSpeed = 0.125;
+		this.splitPuyoAcceleration = 0.024;
+		this.nuisanceInitialSpeed = 0;
+		this.nuisanceAcceleration = [0.01758, 0.01855, 0.01563, 0.02051, 0.01660, 0.01953];
+
 		this.nuisanceLandFrames = 4;		// Number of frames taken for the nuisance landing animation
 		this.hashSnapFactor = 100;			// Fraction of a row rounded to when hashing
 		this.hashRotFactor = 50;			// Fraction of a rev rounded to when hashing
@@ -171,7 +175,7 @@ class SettingsBuilder {
 }
 
 class UserSettings {
-	constructor(das = 200, arr = 20, skipFrames = 0, sfxVolume = 0.1, musicVolume = 0.1, appearance = 'TsuClassic') {
+	constructor(das = 133, arr = 33, skipFrames = 0, sfxVolume = 0.1, musicVolume = 0.1, appearance = 'TsuClassic') {
 		this.das = das;						// Milliseconds before holding a key repeatedly triggers the event
 		this.arr = arr;						// Milliseconds between event triggers after the DAS timer is complete
 		this.skipFrames = skipFrames;		// Frames to skip when drawing opponent boards (improves performance)
@@ -209,11 +213,8 @@ const characterNames = ['akari'];
 const SOUNDS_DIRECTORY = './sounds/';
 
 class AudioPlayer {
-	constructor(gameId, socket, sfxVolume, musicVolume, disable) {
-		this.gameId = gameId;
+	constructor(socket, disable) {
 		this.socket = socket;
-		this.sfxVolume = sfxVolume;
-		this.musicVolume = musicVolume;
 		this.cancel = false;
 		this.disabled = disable === 'disable';
 
@@ -226,7 +227,6 @@ class AudioPlayer {
 
 				if(audioInfo.numClips === 1) {
 					const audio = new Audio(SOUNDS_DIRECTORY + `${name}.wav`);
-					audio.volume = this.sfxVolume * ((name === 'win' || name === 'lose') ? 0.6 : 1);
 					this.sfx[name] = [audio];
 				}
 				else {
@@ -235,7 +235,6 @@ class AudioPlayer {
 
 					for(let i = 0; i < audioInfo.numClips; i++) {
 						const audio = new Audio(SOUNDS_DIRECTORY + `${name}_${i + 1}.wav`);
-						audio.volume = this.sfxVolume;
 						audioFiles.push([audio]);
 					}
 					this.sfx[name] = audioFiles;
@@ -248,14 +247,12 @@ class AudioPlayer {
 				const chainAudio = [null];
 				for(let i = 0; i < 13; i++) {
 					const audio = new Audio(SOUNDS_DIRECTORY + `voices/${name}/chain_${i + 1}.ogg`);
-					audio.volume = 0.3;
 					chainAudio.push([audio]);
 				}
 
 				const spellAudio = [null];
 				for(let i = 0; i < 5; i++) {
 					const audio = new Audio(SOUNDS_DIRECTORY + `voices/${name}/spell_${i + 1}.ogg`);
-					audio.volume = 0.3;
 					spellAudio.push([audio]);
 				}
 				this.voices[name] = { chain: chainAudio, spell: spellAudio };
@@ -263,10 +260,16 @@ class AudioPlayer {
 		}
 	}
 
+	configure(gameId, sfxVolume, musicVolume) {
+		this.gameId = gameId;
+		this.sfxVolume = sfxVolume;
+		this.musicVolume = musicVolume;
+	}
+
 	/**
 	 * Plays an audio clip. An 1-based index parameter is provided for more detailed selection.
 	 */
-	playAudio(audio) {
+	playAudio(audio, volume) {
 		let channel = 0;
 		while(channel < audio.length && !audio[channel].paused) {
 			channel++;
@@ -275,9 +278,10 @@ class AudioPlayer {
 		// Generate a new audio object
 		if(channel === audio.length) {
 			const newsfx = audio[channel - 1].cloneNode();
-			newsfx.volume = audio[channel - 1].volume;
 			audio.push(newsfx);
 		}
+
+		audio[channel].volume = volume;
 		audio[channel].play();
 	}
 
@@ -286,7 +290,8 @@ class AudioPlayer {
 			return;
 		}
 		const audio = (index === null) ? this.sfx[sfx_name] : this.sfx[sfx_name][index];
-		this.playAudio(audio);
+		const volume = this.sfxVolume * ((sfx_name === 'win' || sfx_name === 'lose') ? 0.6 : 1);
+		this.playAudio(audio, volume);
 	}
 
 	playVoice(character, audio_name, index = null) {
@@ -294,7 +299,8 @@ class AudioPlayer {
 			return;
 		}
 		const audio = (index === null) ? this.voices[character][audio_name] : this.voices[character][audio_name][index];
-		this.playAudio(audio);
+		const volume = 0.3;
+		this.playAudio(audio, volume);
 	}
 
 	/**

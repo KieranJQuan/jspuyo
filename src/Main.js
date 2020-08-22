@@ -3,16 +3,18 @@
 const { GameArea } = require('./GameDrawer.js');
 const { PlayerGame, SpectateGame } = require('./PlayerGame.js');
 const { Session } = require('./Session.js');
-const { Settings, UserSettings } = require('./Utils.js');
+const { Settings, UserSettings, AudioPlayer } = require('./Utils.js');
 
 const { dialogInit, showDialog } = require('./webpage/dialog.js');
 const { PlayerInfo, initApp, signOut } = require('./webpage/firebase.js');
-const { mainpageInit, clearMessages, updatePlayers, hidePlayers, toggleHost } = require('./webpage/mainpage.js');
+const { mainpageInit, clearMessages, updatePlayers, hidePlayers, toggleHost, toggleSpectate } = require('./webpage/mainpage.js');
 const navbarInit = require('./webpage/navbar.js');
 const { panelsInit, clearModal, updateUserSettings } = require('./webpage/panels.js');
 
 const io = require('socket.io-client');
 const globalSocket = io();
+
+const globalAudioPlayer = new AudioPlayer(globalSocket);
 
 let currentUID;
 let initialized;
@@ -32,6 +34,8 @@ let initialized;
 			mainpageInit(globalSocket, getCurrentUID)
 		]).then(() => {
 			resolve();
+		}).catch(err => {
+			console.log(err);
 		});
 	});
 })();
@@ -49,9 +53,8 @@ async function loginSuccess(user) {
 	globalSocket.off('registered');
 	globalSocket.on('registered', async () => {
 		currentUID = user.uid;
-		let userData;
 		try {
-			userData = await PlayerInfo.loadUserData(currentUID);
+			updateUserSettings(await PlayerInfo.getUserProperty(currentUID, 'userSettings'));
 		}
 		catch(error) {
 			console.log(error);
@@ -59,7 +62,6 @@ async function loginSuccess(user) {
 			signOut();
 			return;
 		}
-		updateUserSettings(userData.userSettings);
 
 		// Check if a joinRoom link was used
 		const urlParams = new URLSearchParams(window.location.search);
@@ -70,7 +72,7 @@ async function loginSuccess(user) {
 			console.log('Joining a room...');
 		}
 		else {
-			globalSocket.emit('freeForAll', { gameId: currentUID }, 'suppress');
+			globalSocket.emit('freeForAll', { gameId: currentUID });
 			document.getElementById('statusGamemode').innerHTML = 'Free For All';
 		}
 	});
@@ -93,9 +95,11 @@ const defaultSkipFrames = [0, 0, 0, 0, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 25
 const mainContent = document.getElementById('main-content');
 const sidebar = document.getElementById('sidebar');
 
+let quickPlayTimer = null;
+
 // Set up all the event listeners
 async function init(socket) {
-	socket.on('roomUpdate', (roomId, allIds, roomSize, settingsString, roomType, host, spectating) => {
+	socket.on('roomUpdate', (roomId, allIds, roomSize, settingsString, roomType, host, spectating, quickPlayStartTime) => {
 		// Clear messages only if joining a new room
 		if(currentRoomId && currentRoomId !== roomId) {
 			clearMessages();
@@ -108,38 +112,66 @@ async function init(socket) {
 			mainContent.classList.remove('ingame');
 		}
 
+		document.getElementById('spectateNotice').style.display = 'none';
 		document.getElementById('statusArea').style.display = 'flex';
 		sidebar.style.display = 'flex';
 
 		const statusMsg = document.getElementById('statusMsg');
 		const statusGamemode = document.getElementById('statusGamemode');
-		const statusSettings = document.getElementById('statusSettings');
+		const statusExtra = document.getElementById('statusExtra');
 		const roomManageOptions = document.getElementById('roomManage');
 
+		if(roomType !== 'default' && quickPlayTimer === null && quickPlayStartTime) {
+			quickPlayTimer = setInterval(() => {
+				const timeLeft = Math.round((quickPlayStartTime - Date.now()) / 1000);		// in seconds
+				if(timeLeft <= 0) {
+					clearInterval(quickPlayTimer);
+					quickPlayTimer = null;
+					statusMsg.innerHTML = `Game starting soon!`;
+				}
+				else {
+					statusMsg.innerHTML = `Game starting in ${timeLeft}...`;
+				}
+			}, 1000);
+		}
+
+		// Set up visual layout
 		if(roomType === 'ffa' || roomType === 'ranked') {
 			statusMsg.style.display = 'block';
 			statusGamemode.style.display = 'block';
+			statusExtra.style.display = 'block';
 			roomManageOptions.style.display = 'none';
+
 			if (allIds.length === 1) {
 				statusMsg.innerHTML = 'Waiting for more players to start...';
+				clearInterval(quickPlayTimer);
+				quickPlayTimer = null;
+			}
+
+			if(spectating) {
+				toggleSpectate();
+				roomManageOptions.style.display = 'block';
+				statusExtra.innerHTML = 'You are currently spectating this room.';
 			}
 			else {
-				statusMsg.innerHTML = 'Game starting soon!';
+				statusExtra.innerHTML = 'Good luck!';
 			}
-			statusSettings.innerHTML = 'Settings: ' + settingsString;
 		}
-		else if (!spectating) {
-			toggleHost(host);
-			roomManageOptions.style.display = 'block';
+		// Custom room
+		else {
+			if(spectating) {
+				toggleSpectate();
+				statusExtra.innerHTML = 'You are currently spectating this room.';
+				statusExtra.style.display = 'block';
+			}
+			else {
+				toggleHost(host);
+				statusExtra.innerHTML = '';
+				statusExtra.style.display = 'none';
+			}
 			statusMsg.style.display = 'none';
 			statusGamemode.style.display = 'none';
-		}
-		else {		// Spectating
-			roomManageOptions.style.display = 'none';
-			statusMsg.style.display = 'block';
-			statusGamemode.style.display = 'none';
-
-			statusMsg.innerHTML = 'You are currently spectating this room.';
+			roomManageOptions.style.display = 'block';
 		}
 
 		updatePlayers(allIds);
@@ -159,8 +191,12 @@ async function init(socket) {
 		clearCells();
 		const gameAreas = generateCells(opponentIds.length + 1, settings, userSettings.appearance);
 
+		// Stop and reset the quick play timer if not already done
+		clearInterval(quickPlayTimer);
+		quickPlayTimer = null;
+
 		// Set up the player's game
-		const game = new PlayerGame(getCurrentUID(), opponentIds, socket, settings, userSettings, gameAreas);
+		const game = new PlayerGame(getCurrentUID(), opponentIds, socket, settings, userSettings, gameAreas, globalAudioPlayer);
 
 		// Create the session
 		currentSession = new Session(getCurrentUID(), game, socket, roomId);
@@ -177,11 +213,13 @@ async function init(socket) {
 		// Add default skipFrames
 		userSettings.skipFrames += defaultSkipFrames[allIds.length];
 
+		document.getElementById('spectateNotice').style.display = 'block';
+
 		// Adjust the number of boards drawn
 		clearCells();
 		const gameAreas = generateCells(allIds.length, settings, userSettings.appearance);
 
-		const game = new SpectateGame(getCurrentUID(), allIds, socket, settings, userSettings, gameAreas);
+		const game = new SpectateGame(getCurrentUID(), allIds, socket, settings, userSettings, gameAreas, globalAudioPlayer);
 
 		// Create the session
 		currentSession = new Session(getCurrentUID(), game, socket, roomId);
@@ -192,6 +230,17 @@ async function init(socket) {
 	socket.on('showDialog', message => {
 		showDialog(message);
 	});
+
+	// Alert the server whenever the browser tab goes into or out of focus
+	document.addEventListener('visibilitychange', () => {
+		if(document.hidden) {
+			socket.emit('focus', getCurrentUID(), false);
+		}
+		else {
+			socket.emit('focus', getCurrentUID(), true);
+		}
+	});
+
 
 	// Return a promise that instantly resolves
 	return new Promise(resolve => resolve());

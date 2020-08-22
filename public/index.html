@@ -68,7 +68,7 @@
                     <label for="gravity" class="roomOptionLabel">Gravity</label>
                     <input type="number" class="roomOptionInput" id="gravity" value="0.036" min="0" max="0.2">
                     <label for="softDrop" class="roomOptionLabel">Soft Drop</label>
-                    <input type="number" class="roomOptionInput" id="softDrop" value="0.27" min="0" max="1">
+                    <input type="number" class="roomOptionInput" id="softDrop" value="0.5" min="0" max="1">
                     <label for="hardDrop" class="roomOptionLabel">Hard Drop</label>
                     <input type="button" class="roomOptionInput off" id="hardDrop" value="OFF">
                     <label for="winCondition" class="roomOptionLabel">Win Condition</label>
@@ -200,6 +200,28 @@
                 </div>
             </div>
         </div>
+        <div class="modal-content" id="roomPasswordModal">
+            <div class="close">&times;</div>
+            <form id="roomPasswordForm" autocomplete="off">
+                <label for="roomPassword">Enter the password for the room.</label><br>
+                <div id="roomPasswordInput">
+                    <input type="text" id="roomPassword" placeholder="<no password>" maxlength="20">
+                </div>
+                <input type="submit" id="roomPasswordSubmit" value="Save Password">
+            </form>
+        </div>
+        <div class="modal-content" id="joinRoomPasswordModal">
+            <div class="close">&times;</div>
+            <form id="joinRoomPasswordForm" autocomplete="off">
+                <label for="joinRoomPassword">Enter the password for the room.</label><br>
+                <div class="hiddenInfo" id="joinRoomId"></div>
+                <div class="errorMsg" id="joinRoomPasswordFormError"></div>
+                <div id="joinRoomPasswordInput">
+                    <input type="text" id="joinRoomPassword" maxlength="20">
+                </div>
+                <input type="submit" id="joinRoomPasswordSubmit" value="Join Room">
+            </form>
+        </div>
     </div>
     <div class="modal" id="modal-background-disable">
         <div class="modal-content dialog" id="dialogBox">
@@ -239,43 +261,52 @@
                 <img src="images/navbar/ProfileIcon.png" class="navIcon">
                 <span class="panelName">Profile</span>
                 <div class="dropdown">
-                    <a id="gallery">Gallery [WIP]</a>
+                    <a id="gallery">Gallery</a>
                     <a id="settings">Settings</a>
                     <a id="logout">Log Out</a>
                 </div>
             </span>
             <span id="logo">jspuyo</span>
         </div>
+        <div id="spectateNotice">You are currently spectating this room.</div>
         <div id="main-content">
             <table id="playArea">
                 <!-- Inserted by javascript -->
             </table>
             <div class="status" id="statusArea">
                 <ul class="justify-flexbox vertical" id="roomManage">
-                    <li id="manageCpus">
+                    <li class="player roomManageOption" id="manageCpus">
                         <img class="roomManageIcon" src="images/mainpage/cpu.png">
                         <span>Manage CPUs</span>
                     </li>
-                    <li id="manageSettings">
+                    <li class="player roomManageOption" id="manageSettings">
                         <img class="roomManageIcon" src="images/mainpage/settings.png">
                         <span>Settings</span>
                     </li>
-                    <li id="manageJoinLink">
+                    <li class="player roomManageOption" id="manageRoomPassword">
+                        <img class="roomManageIcon" src="images/mainpage/password.png">
+                        <span>Set Password</span>
+                    </li>
+                    <li class="player roomManageOption" id="manageJoinLink">
                         <img class="roomManageIcon" src="images/mainpage/link.png">
                         <span>Show Join Link</span>
                     </li>
-                    <li id="manageStartRoom">
+                    <li class="player roomManageOption" id="manageStartRoom">
                         <img class="roomManageIcon" src="images/mainpage/start.png">
                         <span>Start Room</span>
                     </li>
-                    <li id="manageSpectate">
+                    <li class="player roomManageOption" id="manageSpectate">
                         <img class="roomManageIcon" src="images/mainpage/spectate.png">
                         <span>Spectate</span>
+                    </li>
+                    <li class="roomManageOption" id="managePlay">
+                        <img class="roomManageIcon" src="images/navbar/CustomIcon.png">
+                        <span>Play</span>
                     </li>
                 </ul>
                 <div id="statusMsg"></div>
                 <div id="statusGamemode"></div>
-                <div id="statusSettings"></div>
+                <div id="statusExtra"></div>
             </div>
             <div id="sidebar">
                 <div class="playersDisplay" id="playersDisplay">

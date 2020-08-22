@@ -2,10 +2,9 @@
 
 const { Game } = require('./Game.js');
 const { InputManager } = require('./InputManager.js');
-const { AudioPlayer } = require('./Utils.js');
 
 class PlayerGame extends Game {
-	constructor(gameId, opponentIds, socket, settings, userSettings, gameAreas) {
+	constructor(gameId, opponentIds, socket, settings, userSettings, gameAreas, audioPlayer) {
 		super(gameId, opponentIds, socket, settings, userSettings, 1, gameAreas[1]);
 
 		let frame = 0;
@@ -25,7 +24,8 @@ class PlayerGame extends Game {
 			opponentCounter++;
 		});
 
-		this.audioPlayer = new AudioPlayer(this.gameId, socket, this.userSettings.sfxVolume, this.userSettings.musicVolume);
+		this.audioPlayer = audioPlayer;
+		this.audioPlayer.configure(this.gameId, this.userSettings.sfxVolume, this.userSettings.musicVolume);
 
 		// Reset the event listeners
 		this.socket.off('sendState');
@@ -98,7 +98,7 @@ class PlayerGame extends Game {
  * SpectateGame: Only interacts from opponent boards, does not create a board or register inputs for the player.
  */
 class SpectateGame extends Game {
-	constructor(gameId, opponentIds, socket, settings, userSettings, gameAreas) {
+	constructor(gameId, opponentIds, socket, settings, userSettings, gameAreas, audioPlayer) {
 		super(gameId, opponentIds, socket, settings, userSettings);
 
 		let frame = 0;
@@ -112,6 +112,9 @@ class SpectateGame extends Game {
 			this.opponentIdToCellId[id] = opponentCounter;
 			opponentCounter++;
 		});
+
+		this.audioPlayer = audioPlayer;
+		this.audioPlayer.configure(this.gameId, this.userSettings.sfxVolume, this.userSettings.musicVolume);
 
 		// Reset the event listeners
 		this.socket.off('sendState');
