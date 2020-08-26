@@ -224,7 +224,7 @@ class Game {
 				this.currentDrop.affectRotation();
 			}
 
-			const currentBoardState = { connections: this.board.getConnections(), currentDrop: this.currentDrop };
+			const currentBoardState = { board: this.board, connections: this.board.getConnections(), currentDrop: this.currentDrop };
 			currentBoardHash = this.gameArea.updateBoard(currentBoardState);
 			this.updateScore();
 		}
@@ -294,7 +294,7 @@ class Game {
 			}
 		}
 
-		const currentBoardState = { connections: this.board.getConnections(), currentDrop };
+		const currentBoardState = { board: this.board, connections: this.board.getConnections(), currentDrop };
 		currentBoardHash = this.gameArea.updateBoard(currentBoardState);
 
 		if (schezoDropped && arleDropped) {

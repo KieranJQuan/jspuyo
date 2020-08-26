@@ -247,6 +247,11 @@ class GameArea extends CanvasLayer {
 		this.update();
 		return this.getHash();
 	}
+	initNuisanceDrop(nuisanceCascadeFPR) {
+		this.boardLayer.initNuisanceDrop(nuisanceCascadeFPR);
+		this.update();
+		return this.getHash();
+	}
 	dropNuisance(boardState, nuisanceState) {
 		this.boardLayer.dropNuisance(boardState, nuisanceState);
 		this.update();
@@ -284,6 +289,7 @@ class BoardLayer extends CanvasLayer {
 		this.dynamicLayer = new PuyoDrawingLayer(this.width, this.height, this.unit, appearance, onNode);
 		this.columnHeights = [];
 		this.nuisanceCascadeFPR = [];
+		this.ghosts = [];
 		this.mode = null;
 	}
 	update() {
@@ -326,26 +332,7 @@ class BoardLayer extends CanvasLayer {
 				});
 			}
 			this.dynamicLayer.resetState();
-			if (currentDrop.standardAngle > Math.PI / 4 && currentDrop.standardAngle <= 3 * Math.PI / 4) {
-				this.dynamicLayer.drawGhost(currentDrop.colours[0], 0.5 + currentDrop.arle.x, this.settings.rows - 0.5 - this.columnHeights[currentDrop.arle.x]);
-				if (this.columnHeights[currentDrop.arle.x - 1] <= this.columnHeights[currentDrop.arle.x] || this.columnHeights[currentDrop.arle.x - 1] <= currentDrop.arle.y) {
-					this.dynamicLayer.drawGhost(currentDrop.colours[1], -0.5 + currentDrop.arle.x, this.settings.rows - 0.5 - this.columnHeights[currentDrop.arle.x - 1]);
-				}
-			}
-			else if (currentDrop.standardAngle > 3 * Math.PI / 4 && currentDrop.standardAngle <= 5 * Math.PI / 4) {
-				this.dynamicLayer.drawGhost(currentDrop.colours[1], 0.5 + currentDrop.arle.x, this.settings.rows - 0.5 - this.columnHeights[currentDrop.arle.x]);
-				this.dynamicLayer.drawGhost(currentDrop.colours[0], 0.5 + currentDrop.arle.x, this.settings.rows - 1.5 - this.columnHeights[currentDrop.arle.x]);
-			}
-			else if (currentDrop.standardAngle > 5 * Math.PI / 4 && currentDrop.standardAngle <= 7 * Math.PI / 4) {
-				this.dynamicLayer.drawGhost(currentDrop.colours[0], 0.5 + currentDrop.arle.x, this.settings.rows - 0.5 - this.columnHeights[currentDrop.arle.x]);
-				if (this.columnHeights[currentDrop.arle.x + 1] <= this.columnHeights[currentDrop.arle.x] || this.columnHeights[currentDrop.arle.x + 1] <= currentDrop.arle.y) {
-					this.dynamicLayer.drawGhost(currentDrop.colours[1], 1.5 + currentDrop.arle.x, this.settings.rows - 0.5 - this.columnHeights[currentDrop.arle.x + 1]);
-				}
-			}
-			else {
-				this.dynamicLayer.drawGhost(currentDrop.colours[0], 0.5 + currentDrop.arle.x, this.settings.rows - 0.5 - this.columnHeights[currentDrop.arle.x]);
-				this.dynamicLayer.drawGhost(currentDrop.colours[1], 0.5 + currentDrop.arle.x, this.settings.rows - 1.5 - this.columnHeights[currentDrop.arle.x]);
-			}
+			this.drawDropGhost(currentDrop);
 			this.dynamicLayer.drawHighlightedDrop(currentDrop, 0.5 + currentDrop.arle.x, this.settings.rows - 0.5 - currentDrop.arle.y);
 		}
 		else {
@@ -412,8 +399,12 @@ class BoardLayer extends CanvasLayer {
 		}
 		this.update();
 	}
+	initNuisanceDrop(nuisanceCascadeFPR) {
+		this.nuisanceCascadeFPR = nuisanceCascadeFPR;
+		this.update();
+	}
 	dropNuisance(boardState, nuisanceState) {
-		const { nuisanceArray, positions } = nuisanceState;
+		const { nuisanceArray, currentFrame } = nuisanceState;
 		if (this.hasStackChanged(MODE.NUISANCE_DROPPING)) {
 			this.stackLayer.resetState();
 			const connections = new Board(this.settings, boardState).getConnections();
@@ -424,20 +415,63 @@ class BoardLayer extends CanvasLayer {
 			});
 		}
 		this.dynamicLayer.resetState();
-		nuisanceState.allLanded = true;
-
-		positions.forEach((height, index) => {
-			if(height !== -1) {
-				const startRow = Math.max(height, boardState[index].length);
-				if(height > boardState[index].length) {
-					nuisanceState.allLanded = false;
-				}
-				for (let i = 0; i < nuisanceArray[index].length; i++) {
-					this.dynamicLayer.drawPuyo(NUISANCE, index + 0.5, this.settings.rows - 0.5 - (startRow + i));
-				}
+		for (let i = 0; i < this.settings.cols; i++) {
+			const startingRowsAbove = this.settings.nuisanceSpawnRow - boardState[i].length;
+			const rowsDropped = Math.min(currentFrame / this.nuisanceCascadeFPR[i], startingRowsAbove);
+			for (let j = 0; j < nuisanceArray[i].length; j++) {
+				this.dynamicLayer.drawPuyo(NUISANCE, 0.5 + i, this.settings.rows - 0.5 - this.settings.nuisanceSpawnRow + rowsDropped - j);
 			}
-		});
+		}
 		this.update();
+	}
+	drawDropGhost(drop) {
+		if('I'.includes(drop.shape)) {
+			this['draw' + drop.shape + 'Ghost'](drop);
+		}
+	}
+	drawIGhost(drop) {
+		if (drop.standardAngle > Math.PI / 4 && drop.standardAngle <= 3 * Math.PI / 4) {
+			this.dynamicLayer.drawGhost(drop.colours[0], 0.5 + drop.arle.x, this.settings.rows - 0.5 - this.columnHeights[drop.arle.x]);
+			if (this.columnHeights[drop.arle.x - 1] <= this.columnHeights[drop.arle.x] || this.columnHeights[drop.arle.x - 1] <= drop.arle.y) {
+				this.dynamicLayer.drawGhost(drop.colours[1], -0.5 + drop.arle.x, this.settings.rows - 0.5 - this.columnHeights[drop.arle.x - 1]);
+			}
+		}
+		else if (drop.standardAngle > 3 * Math.PI / 4 && drop.standardAngle <= 5 * Math.PI / 4) {
+			this.dynamicLayer.drawGhost(drop.colours[1], 0.5 + drop.arle.x, this.settings.rows - 0.5 - this.columnHeights[drop.arle.x]);
+			this.dynamicLayer.drawGhost(drop.colours[0], 0.5 + drop.arle.x, this.settings.rows - 1.5 - this.columnHeights[drop.arle.x]);
+		}
+		else if (drop.standardAngle > 5 * Math.PI / 4 && drop.standardAngle <= 7 * Math.PI / 4) {
+			this.dynamicLayer.drawGhost(drop.colours[0], 0.5 + drop.arle.x, this.settings.rows - 0.5 - this.columnHeights[drop.arle.x]);
+			if (this.columnHeights[drop.arle.x + 1] <= this.columnHeights[drop.arle.x] || this.columnHeights[drop.arle.x + 1] <= drop.arle.y) {
+				this.dynamicLayer.drawGhost(drop.colours[1], 1.5 + drop.arle.x, this.settings.rows - 0.5 - this.columnHeights[drop.arle.x + 1]);
+			}
+		}
+		else {
+			this.dynamicLayer.drawGhost(drop.colours[0], 0.5 + drop.arle.x, this.settings.rows - 0.5 - this.columnHeights[drop.arle.x]);
+			this.dynamicLayer.drawGhost(drop.colours[1], 0.5 + drop.arle.x, this.settings.rows - 1.5 - this.columnHeights[drop.arle.x]);
+		}
+	}
+	getForecastedBoard(board) {
+
+	}
+	hasGhostChanged(drop) {
+		let newGhost = null;
+		if (drop.rotating === 'not') {
+			const arle = drop.arle;
+			const schezo = drop.getOtherPuyo();
+			if (arle.y < schezo.y) {
+				newGhost = [arle.x, schezo.x];
+			} else if (arle.y === schezo.y) {
+				if (arle.x < schezo.x) {
+					newGhost = [arle.x, schezo.x];
+				} else {
+					newGhost = [schezo.x, arle.x];
+				}
+			} else {
+				newGhost = [schezo.x, arle.x];
+			}
+		}
+		
 	}
 }
 
