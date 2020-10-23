@@ -289,7 +289,8 @@ class BoardLayer extends CanvasLayer {
 		this.dynamicLayer = new PuyoDrawingLayer(this.width, this.height, this.unit, appearance, onNode);
 		this.columnHeights = [];
 		this.nuisanceCascadeFPR = [];
-		this.ghosts = [];
+		this.ghosts = null;
+		this.forecastHighlights = [];
 		this.mode = null;
 	}
 	update() {
@@ -451,27 +452,44 @@ class BoardLayer extends CanvasLayer {
 			this.dynamicLayer.drawGhost(drop.colours[1], 0.5 + drop.arle.x, this.settings.rows - 1.5 - this.columnHeights[drop.arle.x]);
 		}
 	}
-	getForecastedBoard(board) {
-
+	refreshForecastedHighlights(board, drop) {
+		if (this.hasGhostChanged) {
+			const forecastedBoard = new Board(this.settings, board.boardState);
+			board.boardState[this.ghosts[0]].push(drop.colours[0]);
+			board.boardState[this.ghosts[1]].push(drop.colours[1]);
+		}
 	}
 	hasGhostChanged(drop) {
-		let newGhost = null;
+		let result = true;
+		let newGhosts = null;
 		if (drop.rotating === 'not') {
 			const arle = drop.arle;
 			const schezo = drop.getOtherPuyo();
 			if (arle.y < schezo.y) {
-				newGhost = [arle.x, schezo.x];
+				newGhosts = [arle.x, schezo.x];
 			} else if (arle.y === schezo.y) {
 				if (arle.x < schezo.x) {
-					newGhost = [arle.x, schezo.x];
+					newGhosts = [arle.x, schezo.x];
 				} else {
-					newGhost = [schezo.x, arle.x];
+					newGhosts = [schezo.x, arle.x];
 				}
 			} else {
-				newGhost = [schezo.x, arle.x];
+				newGhosts = [schezo.x, arle.x];
 			}
 		}
-		
+		if (newGhosts === null) {
+			if (this.ghosts === null) {
+				result = false;
+			}
+		} else {
+			for (let i = 0; i < newGhosts.length && result; i++) {
+				if (newGhosts[i] !== this.ghosts[i]) {
+					result = false;
+				}
+			}
+		}
+		this.ghosts = newGhosts;
+		return result;
 	}
 }
 
